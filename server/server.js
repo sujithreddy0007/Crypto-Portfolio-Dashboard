@@ -20,9 +20,26 @@ connectDB();
 
 const app = express();
 
-// Middleware
+// CORS configuration for production
+const allowedOrigins = [
+    'http://localhost:3000',
+    process.env.CLIENT_URL,
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin) ||
+            origin.includes('onrender.com') ||
+            origin.includes('vercel.app')) {
+            callback(null, true);
+        } else {
+            callback(null, true); // Allow all in production for now
+        }
+    },
     credentials: true
 }));
 app.use(express.json());

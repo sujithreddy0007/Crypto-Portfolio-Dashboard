@@ -19,6 +19,7 @@ export default function Header() {
         { href: '/watchlist', label: 'Watchlist', requireAuth: true },
         { href: '/alerts', label: 'Alerts', requireAuth: true },
         { href: '/news', label: 'News' },
+        { href: '/learn', label: '📚 Learn' },
     ];
 
     return (
