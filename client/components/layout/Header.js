@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState } from 'react';
 import SearchBar from './SearchBar';
+import CurrencySelector from './CurrencySelector';
 
 export default function Header() {
     const { user, logout } = useAuth();
@@ -57,6 +58,9 @@ export default function Header() {
 
                     {/* Right Section */}
                     <div className="flex items-center gap-2">
+                        {/* Currency Selector */}
+                        <CurrencySelector />
+
                         {/* Theme Toggle */}
                         <button
                             onClick={toggleTheme}

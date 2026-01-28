@@ -13,6 +13,7 @@ const watchlistRoutes = require('./routes/watchlist');
 const alertsRoutes = require('./routes/alerts');
 const newsRoutes = require('./routes/news');
 const chatRoutes = require('./routes/chat');
+const currencyRoutes = require('./routes/currency');
 
 // Connect to database
 connectDB();
@@ -36,6 +37,7 @@ app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/currency', currencyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

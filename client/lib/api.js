@@ -72,7 +72,12 @@ export const portfolioAPI = {
     addHolding: (portfolioId, data) => api.post(`/portfolio/${portfolioId}/holdings`, data),
     updateHolding: (holdingId, data) => api.put(`/portfolio/holdings/${holdingId}`, data),
     deleteHolding: (holdingId) => api.delete(`/portfolio/holdings/${holdingId}`),
+    sellHolding: (portfolioId, holdingId, data) => api.post(`/portfolio/${portfolioId}/holdings/${holdingId}/sell`, data),
+    getTransactions: (portfolioId) => api.get(`/portfolio/${portfolioId}/transactions`),
     getSummary: () => api.get('/portfolio/summary/all'),
+    getReport: (portfolioId) => api.get(`/portfolio/${portfolioId}/report`),
+    downloadCSV: (portfolioId) => `/api/portfolio/${portfolioId}/report/csv`,
+    downloadHTML: (portfolioId) => `/api/portfolio/${portfolioId}/report/html`,
 };
 
 // Watchlist API

@@ -1,4 +1,5 @@
 const Holding = require('../models/Holding');
+const Transaction = require('../models/Transaction');
 const coingeckoService = require('./coingecko');
 
 class PortfolioCalculator {
@@ -15,12 +16,21 @@ class PortfolioCalculator {
         // Get all holdings for this portfolio
         const holdings = await Holding.find({ portfolioId });
 
+        // Get realized P&L from sell transactions
+        const sellTransactions = await Transaction.find({
+            portfolioId,
+            type: 'sell'
+        });
+        const realizedPL = sellTransactions.reduce((sum, tx) => sum + (tx.realizedPL || 0), 0);
+
         if (holdings.length === 0) {
             return {
                 totalInvested: 0,
                 currentValue: 0,
                 profitLoss: 0,
                 profitLossPercentage: 0,
+                realizedPL,
+                unrealizedPL: 0,
                 holdings: [],
                 allocation: []
             };
@@ -86,17 +96,23 @@ class PortfolioCalculator {
         // Aggregate by coin (in case of multiple holdings of same coin)
         const aggregatedAllocation = this.aggregateAllocation(allocation);
 
-        // Calculate overall profit/loss
-        const profitLoss = currentValue - totalInvested;
+        // Calculate overall profit/loss (unrealized - from current holdings)
+        const unrealizedPL = currentValue - totalInvested;
         const profitLossPercentage = totalInvested > 0
-            ? (profitLoss / totalInvested) * 100
+            ? (unrealizedPL / totalInvested) * 100
             : 0;
+
+        // Total P&L = unrealized + realized from sales
+        const totalProfitLoss = unrealizedPL + realizedPL;
 
         return {
             totalInvested,
             currentValue,
-            profitLoss,
+            profitLoss: unrealizedPL,  // Keep for backward compatibility
             profitLossPercentage,
+            realizedPL,          // Profit/loss from sold coins
+            unrealizedPL,        // Profit/loss from current holdings
+            totalProfitLoss,     // Combined total P&L
             holdings: holdingsWithMetrics,
             allocation: aggregatedAllocation
         };

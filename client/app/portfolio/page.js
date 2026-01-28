@@ -29,6 +29,9 @@ export default function PortfolioPage() {
     const [loading, setLoading] = useState(true);
     const [showAddHolding, setShowAddHolding] = useState(false);
     const [showCreatePortfolio, setShowCreatePortfolio] = useState(false);
+    const [showSellModal, setShowSellModal] = useState(false);
+    const [selectedHolding, setSelectedHolding] = useState(null);
+    const [sellForm, setSellForm] = useState({ quantity: '', sellPrice: '' });
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [selectedCoin, setSelectedCoin] = useState(null);
@@ -54,6 +57,10 @@ export default function PortfolioPage() {
             setPortfolios(portfolioList);
             if (portfolioList.length > 0 && !selectedPortfolio) {
                 setSelectedPortfolio(portfolioList[0]);
+            } else if (selectedPortfolio) {
+                // Refresh selected portfolio data
+                const updated = portfolioList.find(p => p._id === selectedPortfolio._id);
+                if (updated) setSelectedPortfolio(updated);
             }
         } catch (error) {
             console.error('Error fetching portfolios:', error);
@@ -112,6 +119,48 @@ export default function PortfolioPage() {
             fetchPortfolios();
         } catch (error) {
             toast.error('Failed to delete holding');
+        }
+    };
+
+    const openSellModal = (holding) => {
+        setSelectedHolding(holding);
+        setSellForm({ quantity: '', sellPrice: holding.currentPrice?.toString() || '' });
+        setShowSellModal(true);
+    };
+
+    const handleSellHolding = async (e) => {
+        e.preventDefault();
+        if (!selectedHolding || !sellForm.quantity) {
+            toast.error('Please enter quantity to sell');
+            return;
+        }
+
+        const sellQty = parseFloat(sellForm.quantity);
+        if (sellQty <= 0 || sellQty > selectedHolding.quantity) {
+            toast.error(`Invalid quantity. Max: ${selectedHolding.quantity}`);
+            return;
+        }
+
+        try {
+            const response = await portfolioAPI.sellHolding(
+                selectedPortfolio._id,
+                selectedHolding._id,
+                {
+                    quantity: sellQty,
+                    sellPrice: parseFloat(sellForm.sellPrice) || null
+                }
+            );
+
+            const { realizedPL, message } = response.data.data;
+            const plText = realizedPL >= 0 ? `+${formatPrice(realizedPL)}` : formatPrice(realizedPL);
+            toast.success(`${message}\nRealized P&L: ${plText}`);
+
+            setShowSellModal(false);
+            setSelectedHolding(null);
+            setSellForm({ quantity: '', sellPrice: '' });
+            fetchPortfolios();
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to sell holding');
         }
     };
 
@@ -183,12 +232,39 @@ export default function PortfolioPage() {
                         + New Portfolio
                     </button>
                     {selectedPortfolio && (
-                        <button onClick={() => setShowAddHolding(true)} className="btn-primary">
-                            + Add Holding
-                        </button>
+                        <>
+                            <button onClick={() => setShowAddHolding(true)} className="btn-primary">
+                                + Add Holding
+                            </button>
+                            <div className="relative group">
+                                <button className="btn-secondary flex items-center gap-2">
+                                    📥 Download
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-dark-800 rounded-lg shadow-lg border border-dark-200 dark:border-dark-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                    <a
+                                        href={portfolioAPI.downloadCSV(selectedPortfolio._id)}
+                                        className="block px-4 py-3 text-sm text-dark-700 dark:text-dark-200 hover:bg-dark-50 dark:hover:bg-dark-700 rounded-t-lg"
+                                    >
+                                        📄 Download CSV
+                                    </a>
+                                    <a
+                                        href={portfolioAPI.downloadHTML(selectedPortfolio._id)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block px-4 py-3 text-sm text-dark-700 dark:text-dark-200 hover:bg-dark-50 dark:hover:bg-dark-700 rounded-b-lg"
+                                    >
+                                        🖨️ View & Print Report
+                                    </a>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>
+
 
             {/* Portfolio Selector */}
             {portfolios.length > 1 && (
@@ -198,8 +274,8 @@ export default function PortfolioPage() {
                             key={portfolio._id}
                             onClick={() => setSelectedPortfolio(portfolio)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPortfolio?._id === portfolio._id
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-dark-100 dark:bg-dark-700 text-dark-600 dark:text-dark-300 hover:bg-dark-200 dark:hover:bg-dark-600'
+                                ? 'bg-primary-600 text-white'
+                                : 'bg-dark-100 dark:bg-dark-700 text-dark-600 dark:text-dark-300 hover:bg-dark-200 dark:hover:bg-dark-600'
                                 }`}
                         >
                             {portfolio.name}
@@ -283,12 +359,20 @@ export default function PortfolioPage() {
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-4 text-right">
-                                                            <button
-                                                                onClick={() => handleDeleteHolding(holding._id)}
-                                                                className="text-crypto-red hover:underline text-sm"
-                                                            >
-                                                                Delete
-                                                            </button>
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => openSellModal(holding)}
+                                                                    className="px-3 py-1 bg-crypto-green/10 text-crypto-green hover:bg-crypto-green/20 rounded text-sm font-medium transition-colors"
+                                                                >
+                                                                    Sell
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteHolding(holding._id)}
+                                                                    className="text-crypto-red hover:underline text-sm"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -428,6 +512,127 @@ export default function PortfolioPage() {
                     </div>
                 </div>
             )}
+
+            {/* Sell Holding Modal */}
+            {showSellModal && selectedHolding && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                    <div className="card p-6 w-full max-w-md m-4 animate-in">
+                        <h2 className="text-xl font-bold text-dark-900 dark:text-white mb-4">
+                            Sell {selectedHolding.name}
+                        </h2>
+
+                        {/* Holding Info */}
+                        <div className="bg-dark-50 dark:bg-dark-700 rounded-lg p-4 mb-4">
+                            <div className="flex justify-between mb-2">
+                                <span className="text-dark-500">Available</span>
+                                <span className="font-medium text-dark-900 dark:text-white">
+                                    {selectedHolding.quantity} {selectedHolding.symbol}
+                                </span>
+                            </div>
+                            <div className="flex justify-between mb-2">
+                                <span className="text-dark-500">Buy Price</span>
+                                <span className="text-dark-600 dark:text-dark-300">
+                                    {formatPrice(selectedHolding.buyPrice)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-dark-500">Current Price</span>
+                                <span className="text-dark-900 dark:text-white font-medium">
+                                    {formatPrice(selectedHolding.currentPrice)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSellHolding} className="space-y-4">
+                            <div>
+                                <label className="label">Quantity to Sell</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        max={selectedHolding.quantity}
+                                        value={sellForm.quantity}
+                                        onChange={(e) => setSellForm({ ...sellForm, quantity: e.target.value })}
+                                        className="input pr-16"
+                                        placeholder="0.00"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setSellForm({ ...sellForm, quantity: selectedHolding.quantity.toString() })}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                                    >
+                                        MAX
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="label">Sell Price (USD)</label>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={sellForm.sellPrice}
+                                    onChange={(e) => setSellForm({ ...sellForm, sellPrice: e.target.value })}
+                                    className="input"
+                                    placeholder="Current market price"
+                                />
+                                <p className="text-xs text-dark-500 mt-1">Leave empty to use current market price</p>
+                            </div>
+
+                            {/* P&L Preview */}
+                            {sellForm.quantity && parseFloat(sellForm.quantity) > 0 && (
+                                <div className="bg-dark-50 dark:bg-dark-700 rounded-lg p-4">
+                                    <p className="text-sm text-dark-500 mb-2">Estimated Result</p>
+                                    {(() => {
+                                        const qty = parseFloat(sellForm.quantity) || 0;
+                                        const sellPrice = parseFloat(sellForm.sellPrice) || selectedHolding.currentPrice || 0;
+                                        const saleValue = qty * sellPrice;
+                                        const costBasis = qty * selectedHolding.buyPrice;
+                                        const pl = saleValue - costBasis;
+                                        const plPercent = costBasis > 0 ? (pl / costBasis) * 100 : 0;
+
+                                        return (
+                                            <>
+                                                <div className="flex justify-between mb-1">
+                                                    <span className="text-dark-600 dark:text-dark-300">Sale Value</span>
+                                                    <span className="font-medium text-dark-900 dark:text-white">{formatPrice(saleValue)}</span>
+                                                </div>
+                                                <div className="flex justify-between mb-1">
+                                                    <span className="text-dark-600 dark:text-dark-300">Cost Basis</span>
+                                                    <span className="text-dark-600 dark:text-dark-300">{formatPrice(costBasis)}</span>
+                                                </div>
+                                                <div className="flex justify-between pt-2 border-t border-dark-200 dark:border-dark-600">
+                                                    <span className="font-medium text-dark-900 dark:text-white">Realized P&L</span>
+                                                    <span className={`font-bold ${pl >= 0 ? 'text-crypto-green' : 'text-crypto-red'}`}>
+                                                        {pl >= 0 ? '+' : ''}{formatPrice(pl)} ({plPercent >= 0 ? '+' : ''}{plPercent.toFixed(2)}%)
+                                                    </span>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowSellModal(false);
+                                        setSelectedHolding(null);
+                                    }}
+                                    className="btn-secondary flex-1"
+                                >
+                                    Cancel
+                                </button>
+                                <button type="submit" className="btn-primary flex-1 bg-crypto-green hover:bg-crypto-green/90">
+                                    Sell {selectedHolding.symbol}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

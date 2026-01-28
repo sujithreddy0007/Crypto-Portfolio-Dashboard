@@ -2,17 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { marketAPI } from '@/lib/api';
-
-function formatNumber(num) {
-    if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-    return num?.toLocaleString() || '0';
-}
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export default function GlobalStats() {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const { convertPrice, currencySymbol } = useCurrency();
+
+    // Format large numbers with currency conversion
+    const formatNumber = (num) => {
+        if (!num) return '0';
+        const converted = convertPrice(num);
+        if (converted >= 1e12) return (converted / 1e12).toFixed(2) + 'T';
+        if (converted >= 1e9) return (converted / 1e9).toFixed(2) + 'B';
+        if (converted >= 1e6) return (converted / 1e6).toFixed(2) + 'M';
+        return converted.toLocaleString();
+    };
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -61,7 +66,7 @@ export default function GlobalStats() {
                     <div className="flex items-center gap-2">
                         <span className="text-dark-500 dark:text-dark-400">Market Cap:</span>
                         <span className="font-medium text-dark-900 dark:text-white">
-                            ${formatNumber(stats.totalMarketCap)}
+                            {currencySymbol}{formatNumber(stats.totalMarketCap)}
                         </span>
                         <span className={`text-xs ${stats.marketCapChange24h >= 0 ? 'text-crypto-green' : 'text-crypto-red'}`}>
                             {stats.marketCapChange24h >= 0 ? '▲' : '▼'} {Math.abs(stats.marketCapChange24h).toFixed(2)}%
@@ -71,7 +76,7 @@ export default function GlobalStats() {
                     <div className="flex items-center gap-2">
                         <span className="text-dark-500 dark:text-dark-400">24h Vol:</span>
                         <span className="font-medium text-dark-900 dark:text-white">
-                            ${formatNumber(stats.totalVolume)}
+                            {currencySymbol}{formatNumber(stats.totalVolume)}
                         </span>
                     </div>
 
@@ -93,3 +98,4 @@ export default function GlobalStats() {
         </div>
     );
 }
+

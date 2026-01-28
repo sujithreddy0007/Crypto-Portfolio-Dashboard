@@ -3,22 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { marketAPI } from '@/lib/api';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
-
-function formatPrice(price) {
-    if (!price) return '$0.00';
-    if (price >= 1) return '$' + price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (price >= 0.01) return '$' + price.toFixed(4);
-    return '$' + price.toFixed(8);
-}
-
-function formatNumber(num) {
-    if (!num) return '0';
-    if (num >= 1e12) return '$' + (num / 1e12).toFixed(2) + 'T';
-    if (num >= 1e9) return '$' + (num / 1e9).toFixed(2) + 'B';
-    if (num >= 1e6) return '$' + (num / 1e6).toFixed(2) + 'M';
-    return '$' + num.toLocaleString();
-}
 
 function PriceChange({ value }) {
     if (value === null || value === undefined) return <span className="text-dark-400">-</span>;
@@ -58,6 +44,17 @@ export default function CryptoTable({ initialPage = 1, perPage = 50 }) {
     const [page, setPage] = useState(initialPage);
     const [sortBy, setSortBy] = useState('market_cap_desc');
     const [hasMore, setHasMore] = useState(true);
+    const { formatPrice, convertPrice, currencySymbol } = useCurrency();
+
+    // Format large numbers with currency symbol
+    const formatNumber = (num) => {
+        if (!num) return `${currencySymbol}0`;
+        const converted = convertPrice(num);
+        if (converted >= 1e12) return `${currencySymbol}${(converted / 1e12).toFixed(2)}T`;
+        if (converted >= 1e9) return `${currencySymbol}${(converted / 1e9).toFixed(2)}B`;
+        if (converted >= 1e6) return `${currencySymbol}${(converted / 1e6).toFixed(2)}M`;
+        return `${currencySymbol}${converted.toLocaleString()}`;
+    };
 
     useEffect(() => {
         const fetchCoins = async () => {

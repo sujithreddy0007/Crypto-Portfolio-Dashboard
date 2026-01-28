@@ -3,16 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { marketAPI } from '@/lib/api';
-
-function formatPrice(price) {
-    if (!price) return '$0.00';
-    return '$' + price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export default function TopMovers() {
     const [data, setData] = useState({ gainers: [], losers: [] });
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('gainers');
+    const { formatPrice } = useCurrency();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -58,8 +55,8 @@ export default function TopMovers() {
                     <button
                         onClick={() => setTab('gainers')}
                         className={`px-3 py-1 text-xs font-medium rounded transition-colors ${tab === 'gainers'
-                                ? 'bg-white dark:bg-dark-600 text-crypto-green shadow-sm'
-                                : 'text-dark-500 dark:text-dark-400 hover:text-dark-700 dark:hover:text-dark-200'
+                            ? 'bg-white dark:bg-dark-600 text-crypto-green shadow-sm'
+                            : 'text-dark-500 dark:text-dark-400 hover:text-dark-700 dark:hover:text-dark-200'
                             }`}
                     >
                         Gainers
@@ -67,8 +64,8 @@ export default function TopMovers() {
                     <button
                         onClick={() => setTab('losers')}
                         className={`px-3 py-1 text-xs font-medium rounded transition-colors ${tab === 'losers'
-                                ? 'bg-white dark:bg-dark-600 text-crypto-red shadow-sm'
-                                : 'text-dark-500 dark:text-dark-400 hover:text-dark-700 dark:hover:text-dark-200'
+                            ? 'bg-white dark:bg-dark-600 text-crypto-red shadow-sm'
+                            : 'text-dark-500 dark:text-dark-400 hover:text-dark-700 dark:hover:text-dark-200'
                             }`}
                     >
                         Losers

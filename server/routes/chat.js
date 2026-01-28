@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const geminiService = require('../services/gemini');
+const chatService = require('../services/chatService');
 const { optionalAuth } = require('../middleware/auth');
 
 // @route   POST /api/chat
@@ -31,7 +31,7 @@ router.post('/', optionalAuth, async (req, res) => {
             isLoggedIn: !!req.user
         };
 
-        const response = await geminiService.chat(message, enrichedContext);
+        const response = await chatService.chat(message, enrichedContext);
 
         res.json({
             success: response.success,
@@ -54,7 +54,7 @@ router.post('/', optionalAuth, async (req, res) => {
 // @access  Public
 router.get('/suggestions', async (req, res) => {
     try {
-        const suggestions = await geminiService.getQuickSuggestions();
+        const suggestions = await chatService.getQuickSuggestions();
         res.json({
             success: true,
             data: suggestions

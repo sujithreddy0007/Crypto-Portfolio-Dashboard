@@ -3,7 +3,10 @@ const router = express.Router();
 const { protect } = require('../middleware/auth');
 const Portfolio = require('../models/Portfolio');
 const Holding = require('../models/Holding');
+const Transaction = require('../models/Transaction');
 const portfolioCalculator = require('../services/portfolioCalculator');
+const coingeckoService = require('../services/coingecko');
+const reportGenerator = require('../services/reportGenerator');
 
 // @route   GET /api/portfolio
 // @desc    Get all portfolios for current user
@@ -309,6 +312,247 @@ router.get('/summary/all', protect, async (req, res) => {
             success: true,
             data: summary
         });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// @route   POST /api/portfolio/:id/holdings/:holdingId/sell
+// @desc    Sell some or all of a holding
+// @access  Private
+router.post('/:id/holdings/:holdingId/sell', protect, async (req, res) => {
+    try {
+        const { quantity, sellPrice, notes } = req.body;
+        const sellQuantity = parseFloat(quantity);
+        const sellPriceNum = parseFloat(sellPrice);
+
+        if (!sellQuantity || sellQuantity <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a valid quantity to sell'
+            });
+        }
+
+        // Verify portfolio belongs to user
+        const portfolio = await Portfolio.findOne({
+            _id: req.params.id,
+            userId: req.user._id
+        });
+
+        if (!portfolio) {
+            return res.status(404).json({
+                success: false,
+                message: 'Portfolio not found'
+            });
+        }
+
+        // Find the holding
+        const holding = await Holding.findById(req.params.holdingId);
+        if (!holding || holding.portfolioId.toString() !== portfolio._id.toString()) {
+            return res.status(404).json({
+                success: false,
+                message: 'Holding not found'
+            });
+        }
+
+        // Check if sell quantity is valid
+        if (sellQuantity > holding.quantity) {
+            return res.status(400).json({
+                success: false,
+                message: `Cannot sell more than you own. Current quantity: ${holding.quantity}`
+            });
+        }
+
+        // Get current price if not provided
+        let currentPrice = sellPriceNum;
+        if (!currentPrice) {
+            const prices = await coingeckoService.getMultiplePrices([holding.coinId]);
+            currentPrice = prices[holding.coinId]?.usd || holding.buyPrice;
+        }
+
+        // Calculate realized profit/loss for this sale
+        const costBasis = holding.buyPrice * sellQuantity;
+        const saleValue = currentPrice * sellQuantity;
+        const realizedPL = saleValue - costBasis;
+
+        // Create transaction record
+        const transaction = await Transaction.create({
+            portfolioId: portfolio._id,
+            holdingId: holding._id,
+            coinId: holding.coinId,
+            symbol: holding.symbol,
+            name: holding.name,
+            type: 'sell',
+            quantity: sellQuantity,
+            price: currentPrice,
+            totalValue: saleValue,
+            realizedPL,
+            avgBuyPrice: holding.buyPrice,
+            notes: notes || `Sold ${sellQuantity} ${holding.symbol}`
+        });
+
+        // Update or delete holding
+        const remainingQuantity = holding.quantity - sellQuantity;
+        if (remainingQuantity <= 0) {
+            // Fully sold - delete holding
+            await holding.deleteOne();
+        } else {
+            // Partial sell - update quantity
+            holding.quantity = remainingQuantity;
+            await holding.save();
+        }
+
+        res.json({
+            success: true,
+            data: {
+                transaction,
+                remainingQuantity,
+                realizedPL,
+                message: remainingQuantity <= 0
+                    ? `Sold all ${sellQuantity} ${holding.symbol}`
+                    : `Sold ${sellQuantity} ${holding.symbol}. Remaining: ${remainingQuantity}`
+            }
+        });
+    } catch (error) {
+        console.error('Sell error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// @route   GET /api/portfolio/:id/transactions
+// @desc    Get transaction history for a portfolio
+// @access  Private
+router.get('/:id/transactions', protect, async (req, res) => {
+    try {
+        const portfolio = await Portfolio.findOne({
+            _id: req.params.id,
+            userId: req.user._id
+        });
+
+        if (!portfolio) {
+            return res.status(404).json({
+                success: false,
+                message: 'Portfolio not found'
+            });
+        }
+
+        const transactions = await Transaction.find({ portfolioId: portfolio._id })
+            .sort({ transactionDate: -1 })
+            .limit(100);
+
+        // Calculate totals
+        const sellTransactions = transactions.filter(t => t.type === 'sell');
+        const totalRealizedPL = sellTransactions.reduce((sum, t) => sum + (t.realizedPL || 0), 0);
+
+        res.json({
+            success: true,
+            data: {
+                transactions,
+                summary: {
+                    totalTransactions: transactions.length,
+                    sellCount: sellTransactions.length,
+                    totalRealizedPL
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// @route   GET /api/portfolio/:id/report
+// @desc    Generate portfolio report (JSON format)
+// @access  Private
+router.get('/:id/report', protect, async (req, res) => {
+    try {
+        const portfolio = await Portfolio.findOne({
+            _id: req.params.id,
+            userId: req.user._id
+        });
+
+        if (!portfolio) {
+            return res.status(404).json({
+                success: false,
+                message: 'Portfolio not found'
+            });
+        }
+
+        const reportData = await reportGenerator.generateReport(portfolio._id);
+
+        res.json({
+            success: true,
+            data: reportData
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// @route   GET /api/portfolio/:id/report/csv
+// @desc    Download portfolio report as CSV
+// @access  Private
+router.get('/:id/report/csv', protect, async (req, res) => {
+    try {
+        const portfolio = await Portfolio.findOne({
+            _id: req.params.id,
+            userId: req.user._id
+        });
+
+        if (!portfolio) {
+            return res.status(404).json({
+                success: false,
+                message: 'Portfolio not found'
+            });
+        }
+
+        const reportData = await reportGenerator.generateReport(portfolio._id);
+        const csvContent = reportGenerator.generateCSV(reportData);
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="portfolio-${portfolio.name.replace(/\s+/g, '_')}-${new Date().toISOString().split('T')[0]}.csv"`);
+        res.send(csvContent);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// @route   GET /api/portfolio/:id/report/html
+// @desc    Get portfolio report as HTML (for printing/PDF)
+// @access  Private
+router.get('/:id/report/html', protect, async (req, res) => {
+    try {
+        const portfolio = await Portfolio.findOne({
+            _id: req.params.id,
+            userId: req.user._id
+        });
+
+        if (!portfolio) {
+            return res.status(404).json({
+                success: false,
+                message: 'Portfolio not found'
+            });
+        }
+
+        const reportData = await reportGenerator.generateReport(portfolio._id);
+        const htmlContent = reportGenerator.generateHTML(reportData);
+
+        res.setHeader('Content-Type', 'text/html');
+        res.send(htmlContent);
     } catch (error) {
         res.status(500).json({
             success: false,
