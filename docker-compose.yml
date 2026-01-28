@@ -1,0 +1,58 @@
+# Crypto Portfolio Dashboard - Docker Compose
+# Run with: docker-compose up --build
+
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: crypto-api
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      # MongoDB - Use host machine's MongoDB
+      # For Windows/Mac Docker Desktop: host.docker.internal
+      # For Linux: Use your machine's IP or 172.17.0.1 (docker bridge)
+      - MONGO_URI=mongodb://host.docker.internal:27017/crypto_portfolio
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-123
+      - JWT_EXPIRE=30d
+      # Ollama - Use host machine's Ollama
+      - OLLAMA_URL=http://host.docker.internal:11434
+      # Optional API keys
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend Next.js App
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:5000
+    container_name: crypto-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  default:
+    name: crypto-network
